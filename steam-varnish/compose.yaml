@@ -1,0 +1,35 @@
+services:
+  nginx:
+    image: steam-lancache-nginx:local
+    build:
+      context: .
+      target: nginx
+    restart: unless-stopped
+    environment:
+      UPSTREAM_HOST: ${UPSTREAM_HOST:-dl.steam.clngaa.com}
+      UPSTREAM_ADDRESS: ${UPSTREAM_ADDRESS:-dl.steam.clngaa.com:80}
+      UPSTREAM_SCHEME: ${UPSTREAM_SCHEME:-http}
+      UPSTREAM_DNS: ${UPSTREAM_DNS:-1.1.1.1 1.0.0.1}
+      MAX_REDIRECTS: ${MAX_REDIRECTS:-5}
+
+  varnish:
+    image: steam-lancache-varnish:local
+    build:
+      context: .
+      target: varnish
+    restart: unless-stopped
+    depends_on:
+      nginx:
+        condition: service_healthy
+        restart: true
+    ports:
+      - "${LISTEN_ADDRESS:-0.0.0.0}:${HTTP_PORT:-80}:80"
+    environment:
+      CACHE_SIZE: ${CACHE_SIZE:-100G}
+      TRANSIENT_SIZE: ${TRANSIENT_SIZE:-256M}
+      CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS:-2592000}
+    volumes:
+      - ${CACHE_DIR:-./cache}:/var/lib/lancache
+    tmpfs:
+      - /var/lib/varnish:exec,size=256m
+    stop_grace_period: 30s

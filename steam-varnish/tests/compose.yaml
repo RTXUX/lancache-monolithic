@@ -1,0 +1,55 @@
+services:
+  origin:
+    build:
+      context: ..
+      target: tests
+    command: ["origin.py"]
+    networks:
+      default:
+        aliases: [origin2]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/__stats"]
+      interval: 1s
+      timeout: 3s
+      retries: 20
+
+  nginx:
+    build:
+      context: ..
+      target: nginx-test
+    depends_on:
+      origin:
+        condition: service_healthy
+    environment:
+      UPSTREAM_ADDRESS: origin:8000
+      UPSTREAM_HOST: dl.steam.clngaa.com
+      UPSTREAM_DNS: 127.0.0.11
+    healthcheck:
+      interval: 1s
+
+  varnish:
+    build:
+      context: ..
+      target: varnish
+    depends_on:
+      nginx:
+        condition: service_healthy
+    environment:
+      CACHE_SIZE: 64M
+      TRANSIENT_SIZE: 32M
+    volumes:
+      - cache:/var/lib/lancache
+    tmpfs:
+      - /var/lib/varnish:exec,size=256m
+    healthcheck:
+      interval: 1s
+
+  tests:
+    build:
+      context: ..
+      target: tests
+    volumes:
+      - cache:/cache:ro
+
+volumes:
+  cache:
