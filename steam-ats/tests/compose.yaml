@@ -1,0 +1,42 @@
+services:
+  origin:
+    build:
+      context: ..
+      target: tests
+    command: ["origin.py"]
+    networks:
+      default:
+        aliases: [origin2, dl.steam.clngaa.com]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1/__stats"]
+      interval: 1s
+      timeout: 3s
+      retries: 20
+
+  ats:
+    build:
+      context: ..
+      target: ats-test
+    depends_on:
+      origin:
+        condition: service_healthy
+    environment:
+      CACHE_SIZE: 256M
+      RAM_CACHE_SIZE: 0
+      UPSTREAM_DNS: 127.0.0.11
+      REDIRECT_ACTIONS: routable:follow,private:follow,default:reject
+    volumes:
+      - cache:/var/lib/lancache
+    healthcheck:
+      interval: 1s
+    stop_grace_period: 60s
+
+  tests:
+    build:
+      context: ..
+      target: tests
+    volumes:
+      - cache:/cache:ro
+
+volumes:
+  cache:

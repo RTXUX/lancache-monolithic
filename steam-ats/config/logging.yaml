@@ -1,0 +1,11 @@
+logging:
+  formats:
+    - name: cache
+      format: '%<cqtq> %<chi> %<crc>/%<pssc> %<psql> %<cqhm> %<pquc> upstream=%<shn> elapsed_ms=%<ttms>'
+  logs:
+    - filename: access
+      format: cache
+      mode: ascii
+      rolling_enabled: 3
+      rolling_size_mb: 25
+      rolling_interval_sec: 86400

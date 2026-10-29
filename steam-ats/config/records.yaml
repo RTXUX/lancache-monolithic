@@ -1,0 +1,65 @@
+records:
+  admin:
+    user_id: trafficserver
+  exec_thread:
+    autoconfig:
+      enabled: 0
+    limit: @@ATS_THREADS@@
+  url_remap:
+    remap_required: 1
+    pristine_host_hdr: 0
+  dns:
+    nameservers: "@@UPSTREAM_DNS@@"
+  hostdb:
+    ip_resolve: ipv4
+    host_file:
+      path: /etc/hosts
+  cache:
+    enable_read_while_writer: 1
+    max_doc_size: 0
+    ram_cache:
+      size: @@RAM_CACHE_BYTES@@
+    target_fragment_size: 1048576
+    read_while_writer:
+      max_retries: @@RWW_RETRIES@@
+    read_while_writer_retry:
+      delay: @@RWW_RETRY_MS@@
+    dir:
+      sync_frequency: 10
+  http:
+    server_ports: "8080"
+    background_fill_active_timeout: 0
+    background_fill_completed_threshold: 0.0
+    number_of_redirections: @@MAX_REDIRECTS@@
+    redirect_use_orig_cache_key: 1
+    redirect_host_no_port: 1
+    redirect:
+      actions: "@@REDIRECT_ACTIONS@@"
+    insert_response_via_str: 2
+    connect_attempts_timeout: 10
+    transaction_no_activity_timeout_out: 120
+    cache:
+      http: 1
+      required_headers: 0
+      cache_urls_that_look_dynamic: 1
+      cache_responses_to_cookies: 0
+      ignore_client_no_cache: 0
+      ignore_server_no_cache: 0
+      heuristic_min_lifetime: @@CACHE_TTL_SECONDS@@
+      heuristic_max_lifetime: @@CACHE_TTL_SECONDS@@
+      range:
+        lookup: 1
+        write: 1
+      max_open_read_retries: @@OPEN_READ_RETRIES@@
+      open_read_retry_time: @@OPEN_READ_RETRY_MS@@
+      open_write_fail_action: 5
+  ssl:
+    client:
+      verify:
+        server:
+          policy: ENFORCED
+          properties: ALL
+      CA:
+        cert:
+          path: /etc/ssl/certs
+          filename: ca-certificates.crt
