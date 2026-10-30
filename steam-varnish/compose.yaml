@@ -6,9 +6,6 @@ services:
       target: nginx
     restart: unless-stopped
     environment:
-      UPSTREAM_HOST: ${UPSTREAM_HOST:-dl.steam.clngaa.com}
-      UPSTREAM_ADDRESS: ${UPSTREAM_ADDRESS:-dl.steam.clngaa.com:80}
-      UPSTREAM_SCHEME: ${UPSTREAM_SCHEME:-http}
       UPSTREAM_DNS: ${UPSTREAM_DNS:-1.1.1.1 1.0.0.1}
       MAX_REDIRECTS: ${MAX_REDIRECTS:-5}
 

@@ -27,15 +27,6 @@ def size(name, default):
     return result
 
 
-def authority(name, default):
-    value = os.environ.get(name, default)
-    if not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?(?::[0-9]+)?", value):
-        raise ValueError(f"{name} must be a hostname or IPv4 address, optionally with a port")
-    if ":" in value and not 1 <= int(value.rsplit(":", 1)[1]) <= 65535:
-        raise ValueError(f"Invalid port in {name}")
-    return value
-
-
 def render(source, destination, values):
     text = Path(source).read_text()
     for key, value in values.items():
@@ -46,21 +37,12 @@ def render(source, destination, values):
 
 
 def nginx():
-    upstream_host = authority("UPSTREAM_HOST", "dl.steam.clngaa.com")
-    upstream_address = authority("UPSTREAM_ADDRESS", upstream_host)
-    scheme = os.environ.get("UPSTREAM_SCHEME", "http")
-    if scheme not in ("http", "https"):
-        raise ValueError("UPSTREAM_SCHEME must be http or https")
     resolvers = os.environ.get("UPSTREAM_DNS", "1.1.1.1 1.0.0.1").replace(";", " ").split()
     if not resolvers:
         raise ValueError("UPSTREAM_DNS must contain at least one IPv4 DNS server")
     for resolver in resolvers:
         ipaddress.IPv4Address(resolver)
     render("/etc/lancache/nginx/nginx.conf", "/etc/nginx/nginx.conf", {
-        "UPSTREAM_HOST": upstream_host,
-        "UPSTREAM_ADDRESS": upstream_address,
-        "UPSTREAM_SCHEME": scheme,
-        "UPSTREAM_TLS_NAME": upstream_host.split(":", 1)[0],
         "UPSTREAM_DNS": " ".join(resolvers),
         "MAX_REDIRECTS": integer("MAX_REDIRECTS", "5", 0, 8),
     })

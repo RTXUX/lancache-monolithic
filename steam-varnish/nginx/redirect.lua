@@ -44,7 +44,7 @@ if target.port and (not tonumber(target.port) or tonumber(target.port) < 1
     return fail("invalid redirect port")
 end
 
--- Relative/same-origin redirects retain an independently configured Host.
+-- Relative/same-origin redirects retain the client's original Host.
 -- Cross-origin redirects use the new authority and do not forward credentials.
 if target.authority ~= previous.authority or target.scheme ~= previous.scheme then
     ngx.var.target_host = target.authority

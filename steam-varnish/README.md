@@ -1,15 +1,15 @@
 # Steam cache with Varnish and nginx
 
 This directory builds two images from one Dockerfile. Varnish owns the cache;
-nginx fetches from `dl.steam.clngaa.com` and follows redirects. nginx has no cache
-or slice module configured.
+nginx fetches from the client's HTTP `Host` (including an optional port) and
+follows redirects. nginx has no cache or slice module configured.
 
 ```mermaid
 flowchart LR
     Steam[Steam client] -->|HTTP port 80| Varnish[Varnish]
     Varnish -->|cache lookup| File[Fixed-size cache.bin]
     Varnish -->|miss or pass| Nginx[nginx port 8080]
-    Nginx -->|Host: dl.steam.clngaa.com| Origin[dl.steam.clngaa.com]
+    Nginx -->|Client Host and port| Origin[Requested CDN]
     Nginx -->|follow Location| CDN[Redirect destination]
 ```
 
@@ -20,10 +20,15 @@ configure your client-facing DNS separately:
 lancache.steamcontent.com A <CACHE_SERVER_LAN_IP>
 ```
 
-Steam uses that name to discover a LAN cache, but normally sends the selected
-CDN hostname in `Host`. This stack accepts both those requests and requests with
-`Host: lancache.steamcontent.com`. They share one cache namespace because all
-requests select the same configured upstream.
+Steam uses that name to discover a LAN cache, then sends the selected CDN
+hostname in `Host`. The proxy preserves that header and resolves the hostname
+through `UPSTREAM_DNS`. For example, `Host: cache1.example.com:8081` fetches
+`http://cache1.example.com:8081` with the original path and query string.
+Different upstream hosts and ports have separate cache entries.
+
+The discovery hostname does not identify a CDN for downloading content. Use the
+actual CDN Host for content requests; the local health endpoints work with the
+discovery hostname or any other Host without contacting an upstream.
 
 ## Run
 
@@ -62,15 +67,14 @@ docker build --target nginx -t steam-lancache-nginx:local .
 | `CACHE_SIZE` | `100G` | Fixed file size; binary K/M/G/T suffixes or bytes |
 | `TRANSIENT_SIZE` | `256M` | Separate RAM storage limit for passed/uncacheable responses |
 | `CACHE_TTL_SECONDS` | `2592000` | Lifetime of cached immutable chunks: 30 days |
-| `UPSTREAM_ADDRESS` | `dl.steam.clngaa.com:80` | Initial TCP destination, independently configurable from Host |
-| `UPSTREAM_HOST` | `dl.steam.clngaa.com` | Initial HTTP Host and TLS certificate/SNI name |
-| `UPSTREAM_SCHEME` | `http` | Initial HTTP or HTTPS connection |
 | `UPSTREAM_DNS` | `1.1.1.1 1.0.0.1` | IPv4 DNS resolvers used by nginx, including redirected hosts |
 | `MAX_REDIRECTS` | `5` | Maximum followed redirects, between 0 and 8 |
 
-Keep the upstream DNS answers for the origin and redirect destinations pointing
-at the actual CDN. For HTTPS to the initial origin, change both the scheme and
-the destination port. DNS is refreshed by nginx with a 60-second validity.
+Keep the upstream DNS answers for origin and redirect destinations pointing at
+the actual CDN, rather than the cache. Initial requests use HTTP; redirects can
+switch to HTTPS. DNS is refreshed by nginx with a 60-second validity.
+The previous `UPSTREAM_HOST`, `UPSTREAM_ADDRESS`, and `UPSTREAM_SCHEME` overrides
+have been removed; delete them from existing `.env` files.
 
 ## Cache behavior
 
@@ -82,8 +86,8 @@ the destination port. DNS is refreshed by nginx with a 60-second validity.
   the complete object for subsequent requests. Filling a chunk can therefore
   download more bytes than a client's individual range requests.
 - Simultaneous cache misses for the same object collapse into one upstream fetch.
-- The cache key includes the complete original path **and query string**. The
-  final redirect URL does not become the cache key.
+- The cache key includes the original **Host (with port), path, and query
+  string**. The final redirect URL does not become the cache key.
 - Manifests and other paths pass through uncached; their Range headers are
   preserved. Requests containing Authorization or Cookie also pass through.
 - Responses with Set-Cookie, `Vary: *`, or Cache-Control `private`, `no-store`, or
@@ -111,7 +115,7 @@ nginx handles 301, 302, 303, 307, and 308. A small Lua rewrite handler resolves
 absolute, scheme-relative, path-relative, and query-only Location values. The
 native nginx proxy streams the final body; Lua never buffers game data.
 
-Relative redirects keep the initial Host override. A redirect to a different
+Relative redirects keep the client's original Host. A redirect to a different
 authority or scheme uses the new destination's Host and TLS name and drops
 Authorization and Cookie. HTTPS certificates are verified against the image's
 CA bundle. The final response retains status, Content-Range, ETag, and the body.
@@ -148,7 +152,8 @@ sh tests/run.sh
 ```
 
 It builds the actual images, starts local HTTP/HTTPS origins, allocates a 64 MiB
-test cache, and checks full and range hits, HEAD fills, Host overrides, multi-hop
+test cache, and checks full and range hits, HEAD fills, client-selected hosts and
+ports, separation of cache entries between origins, multi-hop
 redirects, TLS verification (including rejection of a wrong certificate name),
 query preservation, pass behavior, concurrent miss coalescing, truncated-body
 recovery, eviction at capacity, file allocation, and cold restarts. No host ports

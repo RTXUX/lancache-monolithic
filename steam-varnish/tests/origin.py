@@ -52,9 +52,14 @@ class Handler(BaseHTTPRequestHandler):
                 "authorization": self.headers.get("Authorization"),
                 "cookie": self.headers.get("Cookie"), "port": self.server.server_port,
             })
-        if self.server.server_port == 8000 and self.headers.get("Host") != "dl.steam.clngaa.com":
-            return self.send(421, b"wrong original Host", head=head)
-        if self.server.server_port == 8001 and self.headers.get("Host") != "origin2:8001":
+        if self.server.server_port == 80 and self.headers.get("Host") not in (
+            "cache-a.steamcontent.com", "cache-a.steamcontent.com:80",
+            "cache-b.steamcontent.com", "cache-b.steamcontent.com:80",
+        ):
+            return self.send(421, b"wrong client Host", head=head)
+        if self.server.server_port == 8001 and self.headers.get("Host") not in (
+            "origin2:8001", "cache-a.steamcontent.com:8001",
+        ):
             return self.send(421, b"wrong redirect Host", head=head)
         if self.server.server_port == 8443 and self.headers.get("Host") != "origin2:8443":
             return self.send(421, b"wrong TLS Host", head=head)
@@ -93,6 +98,12 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/next?case=chain&ready=1":
             return self.send(307, headers={"Location": "http://origin2:8001/final?token=a%2Fb"}, head=head)
 
+        body = BODY
+        if parsed.path.startswith("/depot/") and (
+            self.headers.get("Host", "").split(":", 1)[0] == "cache-b.steamcontent.com"
+            or self.server.server_port == 8001
+        ):
+            body = BODY[::-1]
         headers = {"Content-Type": "application/octet-stream", "ETag": '"chunk-v1"',
                    "Cache-Control": "public, max-age=3600", "Accept-Ranges": "bytes"}
         if case == "private":
@@ -100,19 +111,19 @@ class Handler(BaseHTTPRequestHandler):
         if case == "cookie":
             headers["Set-Cookie"] = "session=test"
         if case == "partial":
-            headers["Content-Range"] = f"bytes 0-15/{len(BODY)}"
-            return self.send(206, BODY[:16], headers, head=head)
+            headers["Content-Range"] = f"bytes 0-15/{len(body)}"
+            return self.send(206, body[:16], headers, head=head)
         requested_range = self.headers.get("Range")
         if requested_range:
             start, end = requested_range.removeprefix("bytes=").split("-")
-            start, end = int(start), min(int(end), len(BODY) - 1)
-            headers["Content-Range"] = f"bytes {start}-{end}/{len(BODY)}"
-            return self.send(206, BODY[start:end + 1], headers, head=head)
-        return self.send(200, BODY, headers, head=head)
+            start, end = int(start), min(int(end), len(body) - 1)
+            headers["Content-Range"] = f"bytes {start}-{end}/{len(body)}"
+            return self.send(206, body[start:end + 1], headers, head=head)
+        return self.send(200, body, headers, head=head)
 
 
 if __name__ == "__main__":
-    for port in (8000, 8001, 8443):
+    for port in (80, 8001, 8443):
         server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
         if port == 8443:
             context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)

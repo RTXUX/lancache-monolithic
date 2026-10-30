@@ -6,9 +6,9 @@ services:
     command: ["origin.py"]
     networks:
       default:
-        aliases: [origin2]
+        aliases: [origin2, cache-a.steamcontent.com, cache-b.steamcontent.com]
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/__stats"]
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1/__stats"]
       interval: 1s
       timeout: 3s
       retries: 20
@@ -21,8 +21,6 @@ services:
       origin:
         condition: service_healthy
     environment:
-      UPSTREAM_ADDRESS: origin:8000
-      UPSTREAM_HOST: dl.steam.clngaa.com
       UPSTREAM_DNS: 127.0.0.11
     healthcheck:
       interval: 1s

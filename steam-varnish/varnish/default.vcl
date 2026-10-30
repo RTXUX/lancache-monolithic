@@ -17,9 +17,7 @@ sub vcl_recv {
         return (synth(405, "Only GET and HEAD are supported"));
     }
 
-    # All client Host values select the same fixed origin and cache namespace.
-    # This also supports Steam's native LANCache discovery, which retains CDN Host.
-    set req.http.host = "lancache.steamcontent.com";
+    # Preserve Host: Steam supplies the actual CDN hostname, not the discovery name.
     if (req.http.Authorization || req.http.Cookie) {
         return (pass);
     }
@@ -33,7 +31,8 @@ sub vcl_recv {
 
 sub vcl_hash {
     hash_data(req.url);  # Keep query strings, including authorization tokens.
-    hash_data("steam-clngaa-v1");
+    hash_data(req.http.host);  # Distinguish upstream hostnames and ports.
+    hash_data("steam-host-v2");
     return (lookup);
 }
 

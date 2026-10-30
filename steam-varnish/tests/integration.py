@@ -15,7 +15,7 @@ CHUNK = "/depot/123/chunk/0123456789abcdef0123456789abcdef01234567"
 def request(path, headers=None, method="GET"):
     connection = http.client.HTTPConnection("varnish", 80, timeout=30)
     try:
-        connection.request(method, path, headers={"Host": "lancache.steamcontent.com", **(headers or {})})
+        connection.request(method, path, headers={"Host": "cache-a.steamcontent.com", **(headers or {})})
         response = connection.getresponse()
         return response.status, dict((k.lower(), v) for k, v in response.getheaders()), response.read()
     finally:
@@ -23,20 +23,40 @@ def request(path, headers=None, method="GET"):
 
 
 def stats():
-    with urlopen("http://origin:8000/__stats", timeout=5) as response:
+    with urlopen("http://origin/__stats", timeout=5) as response:
         return json.load(response)
 
 
 class Integration(unittest.TestCase):
-    def test_full_chunk_and_host_rewrite(self):
+    def test_client_hosts_and_ports_route_and_cache_separately(self):
+        path = CHUNK + "?case=host_isolation"
+        for host, body in (
+            ("cache-a.steamcontent.com", BODY),
+            ("cache-b.steamcontent.com", BODY[::-1]),
+            ("cache-a.steamcontent.com:8001", BODY[::-1]),
+        ):
+            with self.subTest(host=host):
+                first = request(path, {"Host": host})
+                hit = request(path, {"Host": host})
+                self.assertEqual((first[0], first[1]["x-cache"], first[2]), (200, "MISS", body))
+                self.assertEqual((hit[0], hit[1]["x-cache"], hit[2]), (200, "HIT", body))
+        upstream = [r for r in stats()["requests"] if r["path"] == path]
+        self.assertEqual([(r["host"], r["port"]) for r in upstream], [
+            ("cache-a.steamcontent.com", 80), ("cache-b.steamcontent.com", 80),
+            ("cache-a.steamcontent.com:8001", 8001),
+        ])
+        # An unreachable host must not be hidden by a cached object at this path.
+        self.assertGreaterEqual(request(path, {"Host": "unreachable.invalid"})[0], 500)
+
+    def test_full_chunk_and_client_host(self):
         path = CHUNK + "?case=direct"
         first = request(path)
-        second = request(path, {"Host": "cache12-lhr1.steamcontent.com"})
+        second = request(path)
         self.assertEqual((first[0], first[1]["x-cache"], first[2]), (200, "MISS", BODY))
         self.assertEqual((second[0], second[1]["x-cache"], second[2]), (200, "HIT", BODY))
         origin_requests = [r for r in stats()["requests"] if r["path"] == path]
         self.assertEqual(len(origin_requests), 1)
-        self.assertEqual(origin_requests[0]["host"], "dl.steam.clngaa.com")
+        self.assertEqual(origin_requests[0]["host"], "cache-a.steamcontent.com")
 
     def test_cold_range_then_full_and_other_range(self):
         path = CHUNK + "?case=range"
