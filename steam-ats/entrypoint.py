@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import pwd
 import re
+import socket
 import sys
 
 CONFIG = Path("/opt/ats/etc/trafficserver")
@@ -55,6 +56,7 @@ def main():
         os.fchmod(file.fileno(), 0o600)
 
     values = {
+        "CACHE_ID": socket.gethostname(),
         "UPSTREAM_DNS": " ".join(resolvers),
         "REDIRECT_ACTIONS": actions,
         "CACHE_BYTES": cache_bytes,

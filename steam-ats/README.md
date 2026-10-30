@@ -43,7 +43,7 @@ Remove the old `UPSTREAM_HOST`,
 `UPSTREAM_PORT`, and `UPSTREAM_SCHEME` settings from existing `.env` files.
 
 The discovery hostname itself does not select a CDN for content downloads. It
-can be used for the local health endpoints.
+can be used for the local probe endpoints below.
 
 The default cache file reserves **100 GiB of real disk space** at startup. Set
 the size before running. Use a dedicated directory for ATS storage. To compare
@@ -61,6 +61,25 @@ docker build --target ats -t steam-lancache-ats:local .
 The Dockerfile pins the ATS source version and SHA-512 checksum. Compiler and
 development dependencies stay in build stages. Runtime uses Debian trixie,
 ATS, its standard plugins, and the small redirect guard described below.
+
+## LANCache probe
+
+`GET` or `HEAD /lancache-heartbeat` returns an empty `204 No Content`, with:
+
+```text
+X-LanCache-Processed-By: <container hostname>
+Access-Control-Allow-Origin: *
+Access-Control-Expose-Headers: *
+Cache-Control: no-store
+```
+
+This is a local response for any Host, with or without a query string; it neither
+resolves nor contacts that host. `/_health` and `/server-status` retain their
+local `200 OK` responses.
+
+```sh
+curl -i http://127.0.0.1/lancache-heartbeat
+```
 
 ## Read-while-writer and cache lock contention
 
@@ -196,7 +215,7 @@ sh tests/run.sh
 
 The suite builds and runs the real ATS image against counted local HTTP/HTTPS
 origins. It checks client-selected hosts and ports, separation of cache entries
-between origins, cold and warm ranges, cache-key retention
+between origins, local LANCache probes, cold and warm ranges, cache-key retention
 through redirects, relative URLs, cycles and hop limits, TLS verification,
 query separation, uncacheable responses, truncation recovery, and concurrent
 miss coalescing. A throttled 8 MiB response proves a second reader gets data
