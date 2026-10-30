@@ -66,6 +66,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(421, b"wrong TLS Host", head=head)
 
         if parsed.path.startswith("/depot/"):
+            if case in ("query_redirect", "query_redirect_stale") and "step" not in query:
+                return self.send(302, headers={"Location": f"?case={case}&step=done&token=a%2Fb"}, head=head)
             if case == "chain":
                 return self.send(302, headers={"Location": "/redirect/start?token=a%2Fb"}, head=head)
             if case == "https":
@@ -135,6 +137,8 @@ class Handler(BaseHTTPRequestHandler):
             body = BODY[::-1]
         headers = {"Content-Type": "application/octet-stream", "ETag": '"chunk-v1"',
                    "Cache-Control": "public, max-age=3600", "Accept-Ranges": "bytes"}
+        if case == "query_redirect_stale" and occurrence == 1:
+            headers["Cache-Control"] = "public, max-age=0"
         if case == "private":
             headers["Cache-Control"] = "private, no-store"
         if case == "cookie":

@@ -17,7 +17,7 @@ trap cleanup EXIT
 trap 'exit 130' INT TERM
 compose build
 compose up -d --wait --wait-timeout 120 origin ats
-compose exec -T ats traffic_ctl config get proxy.config.cache.enable_read_while_writer proxy.config.http.cache.open_write_fail_action proxy.config.http.cache.max_open_read_retries proxy.config.http.cache.open_read_retry_time
+compose exec -T ats traffic_ctl config get proxy.config.cache.enable_read_while_writer proxy.config.http.cache.open_write_fail_action proxy.config.http.cache.max_open_read_retries proxy.config.http.cache.open_read_retry_time proxy.config.http.cache.ignore_query
 compose run --rm --no-deps tests
 compose exec -T ats traffic_ctl metric get proxy.process.cache.read_busy.success
 compose run --rm --no-deps tests integration.py seed

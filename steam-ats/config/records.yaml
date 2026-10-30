@@ -44,6 +44,8 @@ records:
       http: 1
       required_headers: 0
       cache_urls_that_look_dynamic: 1
+      # Ignore query parameters only when hashing; forward them to the origin.
+      ignore_query: 1
       cache_responses_to_cookies: 0
       ignore_client_no_cache: 0
       ignore_server_no_cache: 0

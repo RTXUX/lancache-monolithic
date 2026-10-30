@@ -6,7 +6,7 @@ ARG ATS_SHA512=dbb532fa5714540524853ddeb709871de3f7ab5b363b13fbb16ccb23863fd379e
 ARG BUILD_JOBS=8
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-       ca-certificates curl bzip2 build-essential cmake ninja-build pkg-config \
+       ca-certificates curl bzip2 build-essential cmake ninja-build pkg-config patch \
        libssl-dev libpcre2-dev zlib1g-dev libfmt-dev \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
@@ -16,6 +16,8 @@ RUN curl --fail --location --retry 3 \
     && echo "${ATS_SHA512}  trafficserver.tar.bz2" | sha512sum --check - \
     && tar -xjf trafficserver.tar.bz2 --strip-components=1 \
     && rm trafficserver.tar.bz2
+COPY patches/ /patches/
+RUN patch -p1 < /patches/redirect-reuse-cache-writer.patch
 RUN cmake -S . -B /build -G Ninja \
         -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/opt/ats \
         -DBUILD_TESTING=OFF -DBUILD_REGRESSION_TESTING=OFF \

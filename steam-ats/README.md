@@ -12,6 +12,8 @@ Steam client -> ATS :8080 (published as :80) -> client's requested CDN
 The initial origin is selected by the client's `Host` header, including an
 optional port. ATS preserves Host, path, and query string, including signed
 parameters. Different hosts and ports have separate cache entries.
+Query strings are forwarded upstream but omitted from the cache key, so query
+variants of the same chunk on the same host and port share one cached object.
 
 ## Build and run
 
@@ -128,9 +130,15 @@ Non-chunk and authenticated requests bypass caching and these contention waits.
 
 ATS's `http.number_of_redirections` enables native following, with five hops by
 default. `http.redirect_use_orig_cache_key: 1` stores the final response under
-the original lookup key. Later requests therefore reuse the downloaded object
-without visiting the redirect chain again. Host and TLS SNI follow the new
-destination; HTTPS certificates and hostnames are verified.
+the original lookup key, with its query string excluded. Later requests reuse
+the downloaded object without visiting the redirect chain again. Host and TLS
+SNI follow the new destination; HTTPS certificates and hostnames are verified.
+
+The build applies `patches/redirect-reuse-cache-writer.patch` to ATS 10.2.1.
+When a redirect retains the original cache key and the transaction already owns
+its writer, ATS reuses that writer and resolves/fetches the redirected origin.
+This avoids waiting on its own unfinished object when a redirect changes only
+query parameters. DNS, redirect-address policy, and TLS checks still run.
 
 The included **header-only `redirect_guard.so` plugin** resolves relative
 Location values using libcurl's URL parser and rejects repeated destinations,
@@ -176,8 +184,11 @@ explicitly enable private addresses on their isolated Docker network.
   and HEAD requests use cached objects. A cold HEAD does not proactively fill
   the cache as the Varnish variant does.
 - Partial origin responses, errors, and redirects are not stored as complete
-  chunks. The original authority (host and port), path, and query remain part of
-  the cache identity.
+  chunks. The original authority (host and port) and path identify the object.
+  `http.cache.ignore_query: 1` excludes the query from that identity without
+  changing the URL sent upstream. Cache hits reuse the object regardless of
+  query parameters, including query tokens; Authorization/Cookie headers still
+  bypass caching as described above.
 - `X-Cache` reports ATS's lookup result: `miss`, `hit-fresh`, `hit-stale`, `none`,
   or `skipped`. `/_health` and `/server-status` are local health responses.
 
@@ -217,9 +228,10 @@ The suite builds and runs the real ATS image against counted local HTTP/HTTPS
 origins. It checks client-selected hosts and ports, separation of cache entries
 between origins, local LANCache probes, cold and warm ranges, cache-key retention
 through redirects, relative URLs, cycles and hop limits, TLS verification,
-query separation, uncacheable responses, truncation recovery, and concurrent
-miss coalescing. A throttled 8 MiB response proves a second reader gets data
-**before the origin completes**, including after the first client disconnects.
+query-independent cache hits with intact upstream queries, uncacheable responses,
+truncation recovery, and concurrent miss coalescing. A throttled 8 MiB response
+proves a second reader gets data **before the origin completes**, including after
+the first client disconnects and when the two clients use different queries.
 The runner also prints ATS's `cache.read_busy.success` counter, checks the
 active retry configuration, and verifies a cached object survives a graceful
 restart with RAM caching disabled.

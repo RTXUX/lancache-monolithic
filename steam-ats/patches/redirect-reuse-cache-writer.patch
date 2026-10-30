@@ -1,0 +1,19 @@
+--- a/src/proxy/http/HttpTransact.cc
++++ b/src/proxy/http/HttpTransact.cc
+@@ -1769,6 +1769,16 @@
+   */
+   if (s->redirect_info.redirect_in_process && s->state_machine->enable_redirection) {
+     if (s->txn_conf->cache_http) {
++      // The original-key writer already belongs to this transaction. Looking
++      // that key up again can wait on ourselves (e.g. a query-only redirect
++      // with ignore_query enabled). Keep the writer and resolve the next
++      // origin normally, including redirect-address and TLS checks.
++      if (s->txn_conf->redirect_use_orig_cache_key &&
++          s->cache_info.write_lock_state == CacheWriteLock_t::SUCCESS) {
++        s->cache_info.action = CacheAction_t::WRITE;
++        s->cache_lookup_result = CacheLookupResult_t::MISS;
++        return CallOSDNSLookup(s);
++      }
+       TRANSACT_RETURN(StateMachineAction_t::CACHE_LOOKUP, nullptr);
+     } else {
+       return CallOSDNSLookup(s);
