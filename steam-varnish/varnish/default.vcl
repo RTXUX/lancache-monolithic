@@ -10,7 +10,10 @@ backend default {
 
 sub vcl_recv {
     unset req.http.X-Lancache-Cacheable;
-    if (req.url == "/_health" || req.url == "/server-status") {
+    if (req.url ~ "^/lancache-heartbeat(\?|$)") {
+        return (synth(204, "No Content"));
+    }
+    if (req.url ~ "^/(_health|server-status)(\?|$)") {
         return (synth(200, "OK"));
     }
     if (req.method != "GET" && req.method != "HEAD") {
@@ -75,6 +78,14 @@ sub vcl_deliver {
 }
 
 sub vcl_synth {
+    if (resp.status == 204) {
+        set resp.http.X-LanCache-Processed-By = server.hostname;
+        set resp.http.Access-Control-Allow-Origin = "*";
+        set resp.http.Access-Control-Expose-Headers = "*";
+        set resp.http.Cache-Control = "no-store";
+        synthetic("");
+        return (deliver);
+    }
     set resp.http.Content-Type = "text/plain; charset=utf-8";
     synthetic(resp.reason + "\n");
     return (deliver);

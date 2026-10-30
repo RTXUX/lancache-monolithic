@@ -27,7 +27,7 @@ through `UPSTREAM_DNS`. For example, `Host: cache1.example.com:8081` fetches
 Different upstream hosts and ports have separate cache entries.
 
 The discovery hostname does not identify a CDN for downloading content. Use the
-actual CDN Host for content requests; the local health endpoints work with the
+actual CDN Host for content requests; the probe endpoints below work with the
 discovery hostname or any other Host without contacting an upstream.
 
 ## Run
@@ -75,6 +75,24 @@ the actual CDN, rather than the cache. Initial requests use HTTP; redirects can
 switch to HTTPS. DNS is refreshed by nginx with a 60-second validity.
 The previous `UPSTREAM_HOST`, `UPSTREAM_ADDRESS`, and `UPSTREAM_SCHEME` overrides
 have been removed; delete them from existing `.env` files.
+
+## LANCache probe
+
+`GET` or `HEAD /lancache-heartbeat` returns an empty `204 No Content`, with:
+
+```text
+X-LanCache-Processed-By: <container hostname>
+Access-Control-Allow-Origin: *
+Access-Control-Expose-Headers: *
+Cache-Control: no-store
+```
+
+The response is local, bypasses the cache and DNS lookup, and also works with a
+query string. `/_health` and `/server-status` continue to return local `200 OK`.
+
+```sh
+curl -i http://127.0.0.1/lancache-heartbeat
+```
 
 ## Cache behavior
 
@@ -153,7 +171,7 @@ sh tests/run.sh
 
 It builds the actual images, starts local HTTP/HTTPS origins, allocates a 64 MiB
 test cache, and checks full and range hits, HEAD fills, client-selected hosts and
-ports, separation of cache entries between origins, multi-hop
+ports, separation of cache entries between origins, local LANCache probes, multi-hop
 redirects, TLS verification (including rejection of a wrong certificate name),
 query preservation, pass behavior, concurrent miss coalescing, truncated-body
 recovery, eviction at capacity, file allocation, and cold restarts. No host ports

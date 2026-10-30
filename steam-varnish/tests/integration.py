@@ -48,6 +48,20 @@ class Integration(unittest.TestCase):
         # An unreachable host must not be hidden by a cached object at this path.
         self.assertGreaterEqual(request(path, {"Host": "unreachable.invalid"})[0], 500)
 
+    def test_lancache_probe_is_local_and_uncached(self):
+        before = stats()["counts"]
+        for host in ("lancache.steamcontent.com", "unreachable.invalid:12345"):
+            for path in ("/lancache-heartbeat", "/lancache-heartbeat?probe=1"):
+                for method in ("GET", "HEAD"):
+                    with self.subTest(host=host, path=path, method=method):
+                        status, headers, body = request(path, {"Host": host}, method=method)
+                        self.assertEqual((status, body), (204, b""))
+                        self.assertTrue(headers["x-lancache-processed-by"])
+                        self.assertEqual(headers["access-control-allow-origin"], "*")
+                        self.assertEqual(headers["access-control-expose-headers"], "*")
+                        self.assertEqual(headers["cache-control"], "no-store")
+        self.assertEqual(stats()["counts"], before)
+
     def test_full_chunk_and_client_host(self):
         path = CHUNK + "?case=direct"
         first = request(path)
