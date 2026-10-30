@@ -15,7 +15,7 @@ CHUNK = "/depot/123/chunk/0123456789abcdef0123456789abcdef01234567"
 
 def open_request(path, headers=None, method="GET"):
     connection = http.client.HTTPConnection("ats", 8080, timeout=30)
-    connection.request(method, path, headers={"Host": "lancache.steamcontent.com", **(headers or {})})
+    connection.request(method, path, headers={"Host": "cache-a.steamcontent.com", **(headers or {})})
     return connection, connection.getresponse()
 
 
@@ -33,15 +33,35 @@ def stats():
 
 
 class Integration(unittest.TestCase):
-    def test_full_chunk_and_host_override(self):
+    def test_client_hosts_and_ports_route_and_cache_separately(self):
+        path = CHUNK + "?case=host_isolation"
+        for host, body in (
+            ("cache-a.steamcontent.com", BODY),
+            ("cache-b.steamcontent.com", BODY[::-1]),
+            ("cache-a.steamcontent.com:8001", BODY[::-1]),
+        ):
+            with self.subTest(host=host):
+                first = request(path, {"Host": host})
+                hit = request(path, {"Host": host})
+                self.assertEqual((first[0], first[2]), (200, body))
+                self.assertNotEqual(first[1]["x-cache"], "hit-fresh")
+                self.assertEqual((hit[0], hit[1]["x-cache"], hit[2]), (200, "hit-fresh", body))
+        upstream = [r for r in stats()["requests"] if r["path"] == path]
+        self.assertEqual([(r["host"], r["port"]) for r in upstream], [
+            ("cache-a.steamcontent.com", 80), ("cache-b.steamcontent.com", 80),
+            ("cache-a.steamcontent.com:8001", 8001),
+        ])
+        self.assertGreaterEqual(request(path, {"Host": "unreachable.invalid"})[0], 500)
+
+    def test_full_chunk_and_client_host(self):
         path = CHUNK + "?case=direct"
         first = request(path)
-        second = request(path, {"Host": "cache12-lhr1.steamcontent.com"})
+        second = request(path)
         self.assertEqual((first[0], first[2]), (200, BODY))
         self.assertEqual((second[0], second[1]["x-cache"], second[2]), (200, "hit-fresh", BODY))
         upstream = [r for r in stats()["requests"] if r["path"] == path]
         self.assertEqual(len(upstream), 1)
-        self.assertEqual(upstream[0]["host"], "dl.steam.clngaa.com")
+        self.assertEqual(upstream[0]["host"], "cache-a.steamcontent.com")
 
     def test_cold_range_then_full_and_warm_range(self):
         path = CHUNK + "?case=range"
@@ -114,7 +134,7 @@ class Integration(unittest.TestCase):
         path = CHUNK + "?case=long"
         result = request(path)
         self.assertEqual(result[0], 302)
-        self.assertEqual(result[1]["location"], "http://dl.steam.clngaa.com/long/5")
+        self.assertEqual(result[1]["location"], "http://cache-a.steamcontent.com/long/5")
         self.assertEqual(stats()["counts"][path], 1)
         self.assertEqual(sum(v for k, v in stats()["counts"].items() if k.startswith("/long/")), 5)
 

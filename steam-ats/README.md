@@ -4,15 +4,14 @@ A standalone alternative to `steam-varnish/`. ATS 10.2.1 handles the client
 connection, cache, origin fetch, and redirect following in one container.
 
 ```text
-Steam client -> ATS :8080 (published as :80) -> dl.steam.clngaa.com
+Steam client -> ATS :8080 (published as :80) -> client's requested CDN
                  |                              -> redirect destination
                  +-> fixed-size ats-cache.bin
 ```
 
-The initial origin request uses `Host: dl.steam.clngaa.com`. Both
-`Host: lancache.steamcontent.com` and the original CDN Host sent by Steam's native
-LANCache integration map to this origin and share cache entries. Path and query
-string are preserved, including signed query parameters.
+The initial origin is selected by the client's `Host` header, including an
+optional port. ATS preserves Host, path, and query string, including signed
+parameters. Different hosts and ports have separate cache entries.
 
 ## Build and run
 
@@ -29,12 +28,22 @@ Configure your client-facing DNS separately:
 lancache.steamcontent.com A <CACHE_SERVER_LAN_IP>
 ```
 
-Only the HTTP port is published. ATS uses the independent `UPSTREAM_DNS`
-resolvers for origin and redirect destinations. The default upstream is
-`http://dl.steam.clngaa.com:80`; remapping rewrites Host to the origin hostname.
-Changing `UPSTREAM_HOST`, `UPSTREAM_PORT`, and `UPSTREAM_SCHEME` changes this
-destination. ATS also reads `/etc/hosts`, so Compose `extra_hosts` can pin an
-origin IP without changing its Host header or TLS hostname.
+Only the HTTP port is published. Steam uses the discovery name to find the cache
+IP, then supplies the actual CDN hostname in Host when downloading content.
+For example, `Host: cache1.example.com:8081` fetches
+`http://cache1.example.com:8081` with the original path and query string.
+
+ATS uses the independent `UPSTREAM_DNS` resolvers for origin and redirect
+destinations. Their answers must point at the actual CDNs, not the cache.
+ATS also reads `/etc/hosts`, so Compose `extra_hosts` can pin an origin IP without
+changing its Host header or TLS hostname. The fixed-origin remap has been
+removed; `remap_required: 0` permits requests using their original authority.
+With no remap changing that authority, ATS retains the client's upstream Host.
+Remove the old `UPSTREAM_HOST`,
+`UPSTREAM_PORT`, and `UPSTREAM_SCHEME` settings from existing `.env` files.
+
+The discovery hostname itself does not select a CDN for content downloads. It
+can be used for the local health endpoints.
 
 The default cache file reserves **100 GiB of real disk space** at startup. Set
 the size before running. Use a dedicated directory for ATS storage. To compare
@@ -148,7 +157,8 @@ explicitly enable private addresses on their isolated Docker network.
   and HEAD requests use cached objects. A cold HEAD does not proactively fill
   the cache as the Varnish variant does.
 - Partial origin responses, errors, and redirects are not stored as complete
-  chunks. The original path and query remain part of the cache identity.
+  chunks. The original authority (host and port), path, and query remain part of
+  the cache identity.
 - `X-Cache` reports ATS's lookup result: `miss`, `hit-fresh`, `hit-stale`, `none`,
   or `skipped`. `/_health` and `/server-status` are local health responses.
 
@@ -185,7 +195,8 @@ sh tests/run.sh
 ```
 
 The suite builds and runs the real ATS image against counted local HTTP/HTTPS
-origins. It checks Host rewriting, cold and warm ranges, cache-key retention
+origins. It checks client-selected hosts and ports, separation of cache entries
+between origins, cold and warm ranges, cache-key retention
 through redirects, relative URLs, cycles and hop limits, TLS verification,
 query separation, uncacheable responses, truncation recovery, and concurrent
 miss coalescing. A throttled 8 MiB response proves a second reader gets data

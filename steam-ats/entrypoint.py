@@ -26,13 +26,6 @@ def size(name, default):
 
 
 def main():
-    host = os.environ.get("UPSTREAM_HOST", "dl.steam.clngaa.com")
-    if not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?", host):
-        raise ValueError("UPSTREAM_HOST must be a DNS hostname or IPv4 address")
-    port = integer("UPSTREAM_PORT", "80", 1, 65535)
-    scheme = os.environ.get("UPSTREAM_SCHEME", "http")
-    if scheme not in ("http", "https"):
-        raise ValueError("UPSTREAM_SCHEME must be http or https")
     resolvers = os.environ.get("UPSTREAM_DNS", "1.1.1.1 1.0.0.1").replace(";", " ").split()
     if not resolvers:
         raise ValueError("UPSTREAM_DNS must contain an IPv4 resolver")
@@ -61,9 +54,7 @@ def main():
         os.fchown(file.fileno(), user.pw_uid, user.pw_gid)
         os.fchmod(file.fileno(), 0o600)
 
-    authority = host if (scheme, port) in (("http", 80), ("https", 443)) else f"{host}:{port}"
     values = {
-        "UPSTREAM_URL": f"{scheme}://{authority}",
         "UPSTREAM_DNS": " ".join(resolvers),
         "REDIRECT_ACTIONS": actions,
         "CACHE_BYTES": cache_bytes,

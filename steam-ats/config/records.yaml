@@ -6,7 +6,9 @@ records:
       enabled: 0
     limit: @@ATS_THREADS@@
   url_remap:
-    remap_required: 1
+    remap_required: 0
+    # With no remap, the URL already identifies the client's chosen upstream.
+    # Keep normal URL handling so native redirects update the origin correctly.
     pristine_host_hdr: 0
   dns:
     nameservers: "@@UPSTREAM_DNS@@"

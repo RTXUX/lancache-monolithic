@@ -6,7 +6,7 @@ services:
     command: ["origin.py"]
     networks:
       default:
-        aliases: [origin2, dl.steam.clngaa.com]
+        aliases: [origin2, cache-a.steamcontent.com, cache-b.steamcontent.com]
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1/__stats"]
       interval: 1s
